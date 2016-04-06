@@ -1,0 +1,43 @@
+sudo: false
+language: generic
+jdk:
+  - openjdk7
+notifications:
+  email:
+    on_success: always
+    on_failure: always
+env:
+  global:
+    - TERM=dumb
+    - GRADLE_OPTS="-Xmx768m -Xms256m -Xss1m"
+    - NDK_BUILD_PARALLEL=1
+  matrix:
+    - NDK_BUILD_ABI=arm64-v8a
+    - NDK_BUILD_ABI=armeabi
+    - NDK_BUILD_ABI=armeabi-v7a
+    - NDK_BUILD_ABI=mips
+    - NDK_BUILD_ABI=x86
+    - NDK_BUILD_ABI=x86_64
+addons:
+  apt:
+    packages:
+     - lib32stdc++6
+     - lib32z1
+     - lib32z1-dev
+     - build-essential
+     - wget
+     - unzip
+before_install:
+  - wget https://www.ivarch.com/programs/sources/pv-1.6.0.tar.bz2
+  - tar xjf pv-1.6.0.tar.bz2
+  - cd pv-1.6.0
+  - ./configure --prefix=$HOME --disable-nls
+  - make install
+  - cd ..
+  - rm pv-1.6.0.tar.bz2
+  - export PATH=$HOME/bin:$PATH
+  - travis_retry .jenkins.d/10-get-sdk.sh
+  - travis_retry .jenkins.d/10-get-ndk.sh
+script:
+  - git submodule update --init --recursive
+  - ./gradlew assembleDebug
