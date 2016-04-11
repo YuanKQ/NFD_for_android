@@ -18,6 +18,7 @@
     <string name="drawer_item_strategies">Strategies</string>
     <string name="drawer_item_logcat">Logcat</string>
     <string name="drawer_item_chat">Chat</string>
+    <string name="drawer_item_files">Share Files</string>
     <string name="menu_item_delete_setting_item">Delete</string>
     <string name="fragment_logcat_general_operations_category">General Actions</string>
     <string name="fragment_logcat_tags_n_log_levels">Tags &amp; Log Levels</string>

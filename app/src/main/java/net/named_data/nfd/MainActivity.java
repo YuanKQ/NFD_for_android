@@ -61,17 +61,19 @@ public class MainActivity extends ActionBarActivity
 
       items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_general, 0,
                                               DRAWER_ITEM_GENERAL));
-      items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_faces, 0,
-                                              DRAWER_ITEM_FACES));
+      //items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_faces, 0,
+      //                                        DRAWER_ITEM_FACES));
       items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_routes, 0,
               DRAWER_ITEM_ROUTES));
-      //items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_strategies, 0,
-      //                                            DRAWER_ITEM_CHAT));
+
       items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_logcat, 0,
                                               DRAWER_ITEM_LOGCAT));
 
-      items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_chat, 0,
-                                                  DRAWER_ITEM_CHAT));
+//      items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_chat, 0,
+//                                                  DRAWER_ITEM_CHAT));
+
+      items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_files, 0,
+              DRAWER_ITEM_FILE));
 
       m_drawerFragment = DrawerFragment.newInstance(items);
 
@@ -156,8 +158,11 @@ public class MainActivity extends ActionBarActivity
         case DRAWER_ITEM_LOGCAT:
           fragment = LogcatFragment.newInstance();
           break;
-        case DRAWER_ITEM_CHAT:
-          //fragment = ChatFragment.new
+        //case DRAWER_ITEM_CHAT:
+        //  fragment = ChatFragment.newInstance();
+        //  break;
+        case DRAWER_ITEM_FILE:
+          fragment = FileFragment.newInstance();
           break;
         default:
           // Invalid; Nothing else needs to be done
@@ -204,4 +209,5 @@ public class MainActivity extends ActionBarActivity
   public static final int DRAWER_ITEM_STRATEGIES = 4;
   public static final int DRAWER_ITEM_LOGCAT = 5;
   public static final int DRAWER_ITEM_CHAT = 6;
+  public static final int DRAWER_ITEM_FILE = 7;
 }
