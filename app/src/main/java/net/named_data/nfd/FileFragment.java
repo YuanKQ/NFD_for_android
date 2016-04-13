@@ -2,6 +2,7 @@ package net.named_data.nfd;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
+import android.os.Looper;
 import android.support.v4.app.Fragment;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
@@ -55,8 +56,13 @@ public class FileFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        FileListenThread m_fileListener = new FileListenThread();
-        m_fileListener.start();
+        Log.i(TAG, "onCreate!");
+        m_threadName = new String("" + System.currentTimeMillis());
+        Log.i(TAG, "threadName" +  m_threadName);
+        m_fListener = new FileListenThread();
+        m_fListener.start();
+
+        m_handler = new MyHandler(Looper.getMainLooper());
 
         //make the file directory in the android phone
         if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
@@ -71,12 +77,12 @@ public class FileFragment extends Fragment {
         } else {
             m_savePath = null;
         }
-        sendDebugMsg("m_savePath = " + m_savePath);
+        //sendDebugMsg("m_savePath = " + m_savePath);
 //        File[] fs = m_savePath.listFiles();
 //        for (File f: fs) {
 //            sendDebugMsg(f.getName());
 //        }
-       // Log.i(TAG, "m_savePath = " + m_savePath);
+        // Log.i(TAG, "m_savePath = " + m_savePath);
 
         m_fileList = new ArrayList<String>();
     }
@@ -104,8 +110,8 @@ public class FileFragment extends Fragment {
                 if (!"".equals(face)) {
 //                    sendDebugMsg("Face Address: " + face);
                     m_faceAddr = face;
-                    FileReqThread fileReqThread = new FileReqThread(face);
-                    fileReqThread.start();
+                    m_fRequester = new FileReqThread(face);
+                    m_fRequester.start();
                 } else {
                     Toast.makeText(getActivity(), "Please input the correct face address!",
                             Toast.LENGTH_LONG).show();
@@ -120,9 +126,9 @@ public class FileFragment extends Fragment {
                 String filename = m_edFaceFile.getText().toString();
                 if (!filename.equals("")) {
                     if (m_fileList.contains(filename)) {
-                        sendDebugMsg("FileLoadThread begin to run!");
-                        FileLoadThread fileLoadThread = new FileLoadThread(m_faceAddr, filename);
-                        fileLoadThread.start();
+                        //sendDebugMsg("FileLoadThread begin to run!");
+                        m_fLoader = new FileLoadThread(m_faceAddr, filename);
+                        m_fLoader.start();
                     } else {
                         Toast.makeText(getActivity(), "The file doesn't exist!",
                                 Toast.LENGTH_LONG).show();
@@ -139,6 +145,12 @@ public class FileFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
+//        if (m_fLoader != null)
+//            m_fLoader.loadFaceClose();
+        if (m_fListener != null)
+            m_fListener.listenFaceClose();
+
+//        Log.i(TAG, "onPause!");
     }
 
     /****
@@ -176,7 +188,8 @@ public class FileFragment extends Fragment {
             ++callbackCount;
             long elapsedTime = System.currentTimeMillis() - this.startTime;
             String name = data.getName().toUri();
-            sendDebugMsg("type = " + type);
+
+//            sendDebugMsg("type = " + type);
             if (type == 1) {
                 writeToFile(data);
             } else {
@@ -185,7 +198,8 @@ public class FileFragment extends Fragment {
 
             //print to the logcat
             String contentStr = name + ": " + String.valueOf(elapsedTime) + " ms\n";
-            Log.i(TAG, "Content " + contentStr);
+            Log.i(TAG, "The receive threadName is: " + m_threadName);
+            Log.i(TAG, ">> Content " + contentStr);
 
             // Send a result to Screen
             Message msg = new Message();
@@ -193,15 +207,15 @@ public class FileFragment extends Fragment {
                 msg.what = 201; // Result Code ex) Success code: 201 , File msg;
                 msg.obj = contentStr; // Result Object
             } else {
-                msg.what = 200; //  Result Code ex) Success code: 200 , conmon msg;
+                msg.what = 200; //  Result Code ex) Success code: 200 , common msg;
                 msg.obj = m_fileList;
             }
 
-            actionHandler.sendMessage(msg);
+            m_handler.sendMessage(msg);
         }
 
         private void buildFileList(Data data) {
-            sendDebugMsg(data.getContent().toString());
+            //sendDebugMsg(data.getContent().toString());
             String[] strs = data.getContent().toString().split("/");
             for (String str : strs) {
                 m_fileList.add(str);
@@ -212,13 +226,14 @@ public class FileFragment extends Fragment {
         public void onTimeout(Interest interest) {
             ++callbackCount;
             String contentStr = "Time out for interest " + interest.getName().toUri();
-            sendDebugMsg("Time out for interest " + interest.getName().toUri());
+            //sendDebugMsg("Time out for interest " + interest.getName().toUri());
+            Log.i(TAG, contentStr);
 
             // Send a result to Screen
             Message msg = new Message();
             msg.what = 400; // Result Code ex) Success code: 200 , Fail Code:
             msg.obj = contentStr; // Result Object
-            actionHandler.sendMessage(msg);
+            m_handler.sendMessage(msg);
         }
 
         private void writeToFile(Data data) {
@@ -226,19 +241,19 @@ public class FileFragment extends Fragment {
             String[] strs = data.getName().toUri().split("/");
             int len = strs.length;
             if (strs.length >= 3) {
-                sendDebugMsg("strs[len-2]=" + strs[len-2]);
-                if (strs[len-2].matches("^S\\d+")) {
-                    int segment = Integer.parseInt(strs[len-2].substring(1));
-                    sendDebugMsg("write segmemt NO." + segment);
+                //sendDebugMsg("strs[len-2]=" + strs[len - 2]);
+                if (strs[len - 2].matches("^S\\d+")) {
+                    int segment = Integer.parseInt(strs[len - 2].substring(1));
+                    //sendDebugMsg("write segmemt NO." + segment);
                     if (segment == receiveID) {
                         ++receiveID;
-                        sendDebugMsg("receiveID:" + receiveID);
+                        //sendDebugMsg("receiveID:" + receiveID);
                         //write to the file
-                        String fileName = strs[len-1];
+                        String fileName = strs[len - 1];
                         if (segment == 0) {
                             fileRecv = new File(m_savePath, fileName);
                             if (!fileRecv.exists()) {
-                                sendDebugMsg("!fileRecv.exists(): " + fileRecv.getName());
+                                //sendDebugMsg("!fileRecv.exists(): " + fileRecv.getName());
                                 try {
                                     fileRecv.createNewFile();
                                 } catch (IOException e) {
@@ -251,7 +266,7 @@ public class FileFragment extends Fragment {
                                 try {
                                     fileRecv = new File(m_savePath, fileName);
                                     fileRecv.createNewFile();
-                                    sendDebugMsg("createNewFile: " + fileRecv.getName());
+                                    //sendDebugMsg("createNewFile: " + fileRecv.getName());
                                 } catch (IOException e) {
                                     Log.e(TAG, "Fail to create new file" + fileName + " :" + e.getMessage());
                                 }
@@ -270,7 +285,7 @@ public class FileFragment extends Fragment {
                                 rAccessFile.seek(fileLength);
                                 rAccessFile.write(buf);
                                 rAccessFile.close();
-                                sendDebugMsg("End writing to " + fileRecv.getName() );
+                                sendDebugMsg("End writing to " + fileRecv.getName());
                             } catch (IOException e) {
                                 // TODO: handle exception
                                 sendDebugMsg("IOException in writeToFile:" + e.getMessage());
@@ -280,7 +295,7 @@ public class FileFragment extends Fragment {
                     }
                 } else {
                     String content = data.getContent().toString();
-                    fileSize = Integer.parseInt(content.substring(content.indexOf("=")+1));
+                    fileSize = Integer.parseInt(content.substring(content.indexOf("=") + 1));
                 }
             }
         }
@@ -326,29 +341,31 @@ public class FileFragment extends Fragment {
             faceAddr = addr;
             this.filename = filename;
             send_id = 0;
-            fileTimer = new FileTimer(1);
+            Log.i(TAG, "faceAddr=" + faceAddr + " filename=" + filename);
         }
 
         @Override
         public void run() {
             try {
-                Face face = new Face(faceAddr);
+                Log.i(TAG, "FileLoader run()!");
+                loadFace = new Face(faceAddr);
+                fileTimer = new FileTimer(1);
                 String prefix = PREFIX;
 
                 //send an interest packet to get the size of the file
                 Name name = new Name(prefix).append(filename);
                 sendDebugMsg("Express name " + name.toUri());
                 fileTimer.startUp();
-                face.expressInterest(name, fileTimer, fileTimer);
+                loadFace.expressInterest(name, fileTimer, fileTimer);
                 while (fileTimer.getCallbackCount() < 1) {
-                    face.processEvents();
+                    loadFace.processEvents();
                     Thread.sleep(5);
                 }
                 fileTimer.setCallbackCount(0);  //Important!!!!!
 
                 //send interest packets to get the file
                 int tmpSize = fileTimer.getFileSize();
-                sendDebugMsg("callback=" + fileTimer.getCallbackCount() + " fileSize=" + tmpSize);
+                //sendDebugMsg("callback=" + fileTimer.getCallbackCount() + " fileSize=" + tmpSize);
 //                while (send_id < tmpSize) {
 //                    String interest = prefix + "/T" + tmpSize + "/S" + send_id + "/" + filename;
 //                    Name name1 = new Name(interest);
@@ -369,16 +386,16 @@ public class FileFragment extends Fragment {
                     sendDebugMsg("Express name " + name1.toUri());
                     fileTimer.startUp();
                     int curCallback = fileTimer.getCallbackCount();
-                    face.expressInterest(name1, fileTimer, fileTimer);
+                    interestId = loadFace.expressInterest(name1, fileTimer, fileTimer);
                     if (send_id == fileTimer.getReceiveID()) {
                         ++send_id;
                     }
-                    sendDebugMsg("send_id:" + send_id + " receiveID:" + fileTimer.getReceiveID());
+                    //sendDebugMsg("send_id:" + send_id + " receiveID:" + fileTimer.getReceiveID());
                     do {
                         Thread.sleep(5);
-                        face.processEvents();
+                        loadFace.processEvents();
                     } while (fileTimer.getCallbackCount() < curCallback + 1);
-                    sendDebugMsg("curCallback:" + curCallback + " callBackCount:" + fileTimer.getCallbackCount());
+                    //sendDebugMsg("curCallback:" + curCallback + " callBackCount:" + fileTimer.getCallbackCount());
                 }
 
                 if (fileTimer.getCallbackCount() == (tmpSize + 5)) {
@@ -402,11 +419,22 @@ public class FileFragment extends Fragment {
                             }).show();
                 }
 
+                loadFaceClose();
             } catch (Exception e) {
                 Log.e(TAG, "Exception in FileLoadThread: " + e.getMessage());
             }
         }
 
+        public void loadFaceClose() {
+            if (loadFace != null) {
+                loadFace.removePendingInterest(interestId);
+                loadFace.shutdown();
+                Log.i(TAG, "loadFaceClose()!");
+            }
+        }
+
+        private long interestId;
+        private Face loadFace;
         private String faceAddr;
         private String filename;
         private int send_id;
@@ -422,17 +450,23 @@ public class FileFragment extends Fragment {
         @Override
         public void run() {
             try {
+                Log.i(TAG, "FileReqThread run()!");
+
                 Face face = new Face(faceAddr);
                 FileTimer timer = new FileTimer(0);
                 String prefix = PREFIX + "/fileList";
                 Name name = new Name(prefix);
                 sendDebugMsg("Express name " + name.toUri());
                 timer.startUp();
-                face.expressInterest(name, timer, timer);
+                long interestId = face.expressInterest(name, timer, timer);
                 while (timer.getCallbackCount() < 1) {
                     face.processEvents();
                     Thread.sleep(5);
                 }
+
+                face.removePendingInterest(interestId);
+                face.shutdown();
+                Log.i(TAG, "reqFace close!");
             } catch (Exception e) {
                 sendDebugMsg("exception: " + e.getMessage());
             }
@@ -465,7 +499,7 @@ public class FileFragment extends Fragment {
             Data data = new Data(interest.getName());
 //            String content = "<<Echo " + interest.getName().toString();
 //            data.setContent(new Blob(content));
-
+            Log.i(TAG, ">> onInterest threadName:" + m_threadName);
             sendDebugMsg(">> Interest: " + interest.getName().toUri());
             String[] strs = interest.getName().toUri().split("/");
 //            int i = 0;
@@ -475,11 +509,11 @@ public class FileFragment extends Fragment {
 //            }
             //The order of the judgement can't be changed
             int len = strs.length;
-            if (strs[len-1].equals("fileList")) {
+            if (strs[len - 1].equals("fileList")) {
                 //Log.i(TAG, getReqFileDir());
                 data.setContent(new Blob(getReqFileDir()));
-            } else if (strs[len-2].equals("FILE")) {
-                data.setContent(new Blob(getReqFileSize(strs[len-1])));
+            } else if (strs[len - 2].equals("FILE")) {
+                data.setContent(new Blob(getReqFileSize(strs[len - 1])));
             } else {
                 byte[] content1 = new byte[MAXLEN];
                 File f = new File(m_savePath, strs[len - 1]);
@@ -510,7 +544,7 @@ public class FileFragment extends Fragment {
             msg.what = 201; // Result Code ex) Success code: 200 , Fail Code:
             // 400 ...
             msg.obj = content; // Result Object
-            actionHandler.sendMessage(msg);
+            m_handler.sendMessage(msg);
 
             try {
                 keyChain_.sign(data, certificateName_);
@@ -521,7 +555,7 @@ public class FileFragment extends Fragment {
 
             try {
                 face.putData(data);
-                sendDebugMsg(content);
+                //sendDebugMsg(content);
             } catch (IOException ex) {
                 sendDebugMsg("Echo: IOException in sending data " + ex.getMessage());
             }
@@ -537,8 +571,8 @@ public class FileFragment extends Fragment {
                     size = f.length() / MAXLEN;
             }
 
-            Log.i(TAG, str + "length is: " + f.length());
-            sendDebugMsg("FileSize="+size);
+//            Log.i(TAG, str + "length is: " + f.length());
+            //sendDebugMsg("FileSize=" + size);
 
             return new String("Total=" + size);
         }
@@ -551,7 +585,7 @@ public class FileFragment extends Fragment {
             Message msg = new Message();
             msg.what = 300; //300: failed to register the prefix
             msg.obj = "Register failed for prefix " + prefix.toUri();
-            actionHandler.sendMessage(msg);
+            m_handler.sendMessage(msg);
         }
 
         private String getReqFileDir() {
@@ -562,29 +596,29 @@ public class FileFragment extends Fragment {
                 fileList = fileList + "/" + file.getName();
                 //Log.i(TAG, "In getReqFileDir: " + file.getName());
             }
-            sendDebugMsg("fileList:" + fileList);
+            //sendDebugMsg("fileList:" + fileList);
             return fileList;
         }
 
-        private byte[] getReqFileContent(String filename, String segment) {
-            byte[] content = new byte[MAXLEN];
-            File f = new File(m_savePath, filename);
-            if (f.exists()) {
-                try {
-                    RandomAccessFile rAccessFile = new RandomAccessFile(f, "r");
-                    long curLen = Integer.parseInt(segment.substring(1)) * MAXLEN;
-                    if (curLen <= rAccessFile.length()) {
-                        rAccessFile.seek(curLen);
-                        rAccessFile.read(content);
-                    }
-
-
-                } catch (Exception e) {
-                    Log.e(TAG, "Exception happened in readFile: " + e.getMessage());
-                }
-            }
-            return content;
-        }
+//        private byte[] getReqFileContent(String filename, String segment) {
+//            byte[] content = new byte[MAXLEN];
+//            File f = new File(m_savePath, filename);
+//            if (f.exists()) {
+//                try {
+//                    RandomAccessFile rAccessFile = new RandomAccessFile(f, "r");
+//                    long curLen = Integer.parseInt(segment.substring(1)) * MAXLEN;
+//                    if (curLen <= rAccessFile.length()) {
+//                        rAccessFile.seek(curLen);
+//                        rAccessFile.read(content);
+//                    }
+//
+//
+//                } catch (Exception e) {
+//                    Log.e(TAG, "Exception happened in readFile: " + e.getMessage());
+//                }
+//            }
+//            return content;
+//        }
 
         KeyChain keyChain_;
         Name certificateName_;
@@ -594,7 +628,9 @@ public class FileFragment extends Fragment {
     private class FileListenThread extends Thread {
         public void run() {
             try {
-                Face face = new Face();
+                Log.i(TAG, "FileListenThread run()!");
+
+                listenFace = new Face();
                 // For now, when setting face.setCommandSigningInfo, use a key chain with
                 //   a default private key instead of the system default key chain. This
                 //   is OK for now because NFD is configured to skip verification, so it
@@ -604,23 +640,23 @@ public class FileFragment extends Fragment {
                 KeyChain keyChain = new KeyChain
                         (new IdentityManager(identityStorage, privateKeyStorage),
                                 new SelfVerifyPolicyManager(identityStorage));
-                keyChain.setFace(face);
+                keyChain.setFace(listenFace);
 
                 // Initialize the storage.
                 Name keyName = new Name("/testname/DSK-123");
                 Name certificateName = keyName.getSubName(0, keyName.size() - 1).append
                         ("KEY").append(keyName.get(-1)).append("ID-CERT").append("0");
-                Log.i(TAG, certificateName.toString());
+//                Log.i(TAG, certificateName.toString());
                 identityStorage.addKey(keyName, KeyType.RSA, new Blob(DEFAULT_RSA_PUBLIC_KEY_DER, false));
                 privateKeyStorage.setKeyPairForKeyName
                         (keyName, KeyType.RSA, DEFAULT_RSA_PUBLIC_KEY_DER, DEFAULT_RSA_PRIVATE_KEY_DER);
 
-                face.setCommandSigningInfo(keyChain, certificateName);
+                listenFace.setCommandSigningInfo(keyChain, certificateName);
 
                 Echo echo = new Echo(keyChain, certificateName);
                 Name prefix = new Name(PREFIX);
-                Log.i(TAG, "Register prefix  " + prefix.toUri());
-                face.registerPrefix(prefix, echo, echo);
+//                Log.i(TAG, "Register prefix  " + prefix.toUri());
+                registerPrefixId = listenFace.registerPrefix(prefix, echo, echo);
 
 //                Name prefix1 = new Name("/");
 //                Log.i(TAG, "Register prefix  " + prefix1);
@@ -634,13 +670,24 @@ public class FileFragment extends Fragment {
                 // Wait to receive one interest for the prefix.
                 //while (echo.responseCount_ < 100) {
                 while (true) {
-                    face.processEvents();
+                    listenFace.processEvents();
                     Thread.sleep(5);
                 }
             } catch (Exception e) {
                 sendDebugMsg("exception: " + e.getMessage());
             }
         }
+
+        public void listenFaceClose() {
+            if (listenFace != null) {
+                listenFace.removeRegisteredPrefix(registerPrefixId);
+                listenFace.shutdown();
+                Log.i(TAG, "listenFaceClose()!");
+            }
+        }
+
+        private long registerPrefixId;
+        private Face listenFace;
     }
 
     public void sendDebugMsg(String info) {
@@ -651,46 +698,97 @@ public class FileFragment extends Fragment {
         Message msg = new Message();
         msg.what = 100;
         msg.obj = hour + ":" + min + ":" + sec + " " + info;
-        actionHandler.sendMessage(msg);
+        m_handler.sendMessage(msg);
     }
 
 
     // UI controller
-    public Handler actionHandler = new Handler() {
 
+    private class MyHandler extends Handler{
+        public MyHandler(Looper L) {
+            super(L);
+            Log.i(TAG, "threadName: " + m_threadName);
+        }
+
+        @Override
         public void handleMessage(Message msg) {
-
             String viewMsg = "Empty";
-
+            Log.i(TAG, "msg.what: " + msg.what);
             switch (msg.what) { // Result Code
                 case 100: //Some important informantion about debug
                     viewMsg = (String) msg.obj;
-                    m_tvDebug.append(viewMsg+"\n");
+                    m_tvDebug.append(viewMsg + "\n");
                     break;
                 case 200: // Result Code Ex) Success: 200, fileList
                     m_edFaceFile.setText("");
+                    m_tvFileList.append("------------\n");
+
+                    Calendar ca = Calendar.getInstance();
+                    int hour = ca.get(Calendar.HOUR);
+                    int min = ca.get(Calendar.MINUTE);
+                    int sec = ca.get(Calendar.SECOND);
+                    m_tvFileList.append(hour + ":" + min + ":" + sec + "\n");
+
                     List<String> strs = (List<String>) msg.obj;
                     for (String str : strs) {
                         m_tvFileList.append(str + "\n");
                     }
                     break;
-                case 201: //msg about file operation
+                case 201://msg about file operation
+                    Log.i(TAG, "201!");
                 case 300: //failed to register the prefix
                 case 400: // TimeOut: 400
                     viewMsg = (String) msg.obj;
                     m_tvFileRecv.append(viewMsg + "\n");
+                    Log.i(TAG, "threadId: " + m_threadName + " m_tvFileRecv: " + m_tvFileRecv.getText().toString());
                     break;
                 default:
                     viewMsg = "Error Code: " + msg.what;
-                    m_tvFileRecv.append(viewMsg);
+                    m_tvFileRecv.append(viewMsg + "\n");
                     break;
 
             }
             if (m_proDlg != null)
                 m_proDlg.dismiss();
         }
-
-    };
+    }
+//    public Handler actionHandler = new Handler() {
+//
+//        public void handleMessage(Message msg) {
+//            Log.i(TAG, "threadName: " + m_threadName);
+//            String viewMsg = "Empty";
+//
+//            switch (msg.what) { // Result Code
+//                case 100: //Some important informantion about debug
+//                    viewMsg = (String) msg.obj;
+//                    m_tvDebug.append(viewMsg + "\n");
+//                    break;
+//                case 200: // Result Code Ex) Success: 200, fileList
+//                    m_edFaceFile.setText("");
+//                    List<String> strs = (List<String>) msg.obj;
+//                    for (String str : strs) {
+//                        m_tvFileList.append(str + "\n");
+//                    }
+//                    break;
+//                case 201://msg about file operation
+//                    Log.i(TAG, "200!");
+//                case 300: //failed to register the prefix
+//                case 400: // TimeOut: 400
+//                    viewMsg = (String) msg.obj;
+//                    m_tvFileRecv.append(viewMsg + "\n");
+//                    Log.i(TAG, "m_tvFileRecv: " + m_tvFileRecv.getText().toString());
+//                    break;
+//                default:
+//                    viewMsg = "Error Code: " + msg.what;
+//                    m_tvFileRecv.append(viewMsg);
+//                    break;
+//
+//            }
+//            if (m_proDlg != null)
+//                m_proDlg.dismiss();
+//        }
+//
+//    };
 
     private static final ByteBuffer DEFAULT_RSA_PUBLIC_KEY_DER = toBuffer(new int[]{
             0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01,
@@ -795,6 +893,11 @@ public class FileFragment extends Fragment {
             0xcb, 0xea, 0x8f
     });
 
+    private MyHandler m_handler;
+    private String m_threadName;
+    private FileLoadThread m_fLoader;
+    private FileReqThread m_fRequester;
+    private FileListenThread m_fListener;
     private String m_faceAddr;  // The value will be assigned in the creator of FileReqThread
     private List<String> m_fileList;  //The value will be assigned in the function "onClick" of Button m_btnReq
     private File m_savePath = null;  //It will be initialized in the function "onCreate" of FileListenThread
@@ -808,4 +911,6 @@ public class FileFragment extends Fragment {
     private Button m_btnFetch;
     private static final String TAG = "NDN";
     private ProgressDialog m_proDlg;
+
+
 }

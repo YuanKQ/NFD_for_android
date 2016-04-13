@@ -25,11 +25,13 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarActivity;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 
 import com.intel.jndn.management.types.FaceStatus;
 import com.intel.jndn.management.types.RibEntry;
+
 import net.named_data.nfd.utils.G;
 
 import java.util.ArrayList;
@@ -61,16 +63,16 @@ public class MainActivity extends ActionBarActivity
 
       items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_general, 0,
                                               DRAWER_ITEM_GENERAL));
-      //items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_faces, 0,
-      //                                        DRAWER_ITEM_FACES));
+      items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_faces, 0,
+                                              DRAWER_ITEM_FACES));
       items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_routes, 0,
               DRAWER_ITEM_ROUTES));
 
       items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_logcat, 0,
                                               DRAWER_ITEM_LOGCAT));
 
-//      items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_chat, 0,
-//                                                  DRAWER_ITEM_CHAT));
+      items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_chat, 0,
+                                                  DRAWER_ITEM_CHAT));
 
       items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_files, 0,
               DRAWER_ITEM_FILE));
@@ -142,6 +144,7 @@ public class MainActivity extends ActionBarActivity
     // Create fragment according to user's selection
     Fragment fragment = fragmentManager.findFragmentByTag(fragmentTag);
     if (fragment == null) {
+      Log.i("NDN", "newInstance()");
       switch (itemCode) {
         case DRAWER_ITEM_GENERAL:
           fragment = MainFragment.newInstance();
@@ -158,9 +161,9 @@ public class MainActivity extends ActionBarActivity
         case DRAWER_ITEM_LOGCAT:
           fragment = LogcatFragment.newInstance();
           break;
-        //case DRAWER_ITEM_CHAT:
-        //  fragment = ChatFragment.newInstance();
-        //  break;
+        case DRAWER_ITEM_CHAT:
+          fragment = ChatFragment.newInstance();
+          break;
         case DRAWER_ITEM_FILE:
           fragment = FileFragment.newInstance();
           break;
@@ -193,6 +196,10 @@ public class MainActivity extends ActionBarActivity
   {
     replaceContentFragmentWithBackstack(RouteInfoFragment.newInstance(ribEntry));
   }
+
+
+
+
 
   //////////////////////////////////////////////////////////////////////////////
 

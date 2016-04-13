@@ -26,6 +26,7 @@ import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ListFragment;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -82,13 +83,14 @@ public class RouteListFragment extends ListFragment implements RouteCreateDialog
   public void
   onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-
+    Log.i("NDN", "Face onCreat!");
     setHasOptionsMenu(true);
   }
 
   @Override
   public void onViewCreated(View view, Bundle savedInstanceState)
   {
+    Log.i("NDN", "Face onViewCreated!");
     super.onViewCreated(view, savedInstanceState);
     View v = getLayoutInflater(savedInstanceState).inflate(R.layout.fragment_route_list_list_header, null);
     getListView().addHeaderView(v, null, false);
