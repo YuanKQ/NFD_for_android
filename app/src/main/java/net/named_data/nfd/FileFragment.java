@@ -2,15 +2,15 @@ package net.named_data.nfd;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
-import android.os.Looper;
-import android.support.v4.app.Fragment;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.Nullable;
+import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -50,15 +50,15 @@ import java.util.List;
  */
 public class FileFragment extends Fragment {
     public static Fragment newInstance() {
+        Log.i(TAG, "newInstance!");
         return new FileFragment();
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Log.i(TAG, "onCreate!");
-        m_threadName = new String("" + System.currentTimeMillis());
-        Log.i(TAG, "threadName" +  m_threadName);
+        Log.i(TAG, "@@@onCreate!");
+//        Log.i(TAG, "threadName" +  m_threadName);
         m_fListener = new FileListenThread();
         m_fListener.start();
 
@@ -85,6 +85,7 @@ public class FileFragment extends Fragment {
         // Log.i(TAG, "m_savePath = " + m_savePath);
 
         m_fileList = new ArrayList<String>();
+        m_interestList = new ArrayList<String>();
     }
 
 
@@ -94,6 +95,7 @@ public class FileFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         @SuppressLint("InflateParams")
         View v = inflater.inflate(R.layout.file_request, null);
+        Log.i(TAG, "@@@onCreateView!");
 
         this.m_edFaceFile = (EditText) v.findViewById(R.id.ed_face_file);
         this.m_tvFileRecv = (TextView) v.findViewById(R.id.tv_fileRecv);
@@ -110,7 +112,7 @@ public class FileFragment extends Fragment {
                 if (!"".equals(face)) {
 //                    sendDebugMsg("Face Address: " + face);
                     m_faceAddr = face;
-                    m_fRequester = new FileReqThread(face);
+                    m_fRequester = new FileReqThread();
                     m_fRequester.start();
                 } else {
                     Toast.makeText(getActivity(), "Please input the correct face address!",
@@ -119,6 +121,7 @@ public class FileFragment extends Fragment {
 
             }
         });
+
         this.m_btnFetch = (Button) v.findViewById(R.id.btn_fetch);
         this.m_btnFetch.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -127,7 +130,8 @@ public class FileFragment extends Fragment {
                 if (!filename.equals("")) {
                     if (m_fileList.contains(filename)) {
                         //sendDebugMsg("FileLoadThread begin to run!");
-                        m_fLoader = new FileLoadThread(m_faceAddr, filename);
+                        m_fileName = filename;
+                        m_fLoader = new FileLoadThread();
                         m_fLoader.start();
                     } else {
                         Toast.makeText(getActivity(), "The file doesn't exist!",
@@ -139,18 +143,36 @@ public class FileFragment extends Fragment {
                 }
             }
         });
+
+        this.m_btnRefresh = (Button) v.findViewById(R.id.btn_refresh);
+        this.m_btnRefresh.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                //Attention: type = 1, for geting the latest fileList of the content provider
+                FileReqThread refreshThread = new FileReqThread();
+                refreshThread.start();
+            }
+        });
         return v;
     }
 
     @Override
     public void onPause() {
         super.onPause();
-//        if (m_fLoader != null)
-//            m_fLoader.loadFaceClose();
+        Log.i(TAG, "@@@onPause!");
+    }
+
+
+    @Override
+    /***
+     * The listenFace of the m_fListener can only be closed here.
+     * Once the app comes to the foreground from the background, m_fListener can still be used
+     */
+    public void onDestroy() {
+        super.onDestroy();
         if (m_fListener != null)
             m_fListener.listenFaceClose();
-
-//        Log.i(TAG, "onPause!");
+        Log.i(TAG, "@@@onDestory!");
     }
 
     /****
@@ -198,7 +220,7 @@ public class FileFragment extends Fragment {
 
             //print to the logcat
             String contentStr = name + ": " + String.valueOf(elapsedTime) + " ms\n";
-            Log.i(TAG, "The receive threadName is: " + m_threadName);
+//            Log.i(TAG, "The receive threadName is: " + m_threadName);
             Log.i(TAG, ">> Content " + contentStr);
 
             // Send a result to Screen
@@ -216,6 +238,7 @@ public class FileFragment extends Fragment {
 
         private void buildFileList(Data data) {
             //sendDebugMsg(data.getContent().toString());
+            m_fileList.clear();
             String[] strs = data.getContent().toString().split("/");
             for (String str : strs) {
                 m_fileList.add(str);
@@ -337,9 +360,13 @@ public class FileFragment extends Fragment {
      * This class is used to load files.
      */
     private class FileLoadThread extends Thread {
-        public FileLoadThread(String addr, String filename) {
-            faceAddr = addr;
-            this.filename = filename;
+        /***
+         * The constructor of the class of FileLoadThread
+         * type:0, create the face in local host; else, create the face in the the address of m_faceAddr;
+         */
+        public FileLoadThread() {
+            faceAddr = m_faceAddr;
+            this.filename = m_fileName;
             send_id = 0;
             Log.i(TAG, "faceAddr=" + faceAddr + " filename=" + filename);
         }
@@ -348,14 +375,38 @@ public class FileFragment extends Fragment {
         public void run() {
             try {
                 Log.i(TAG, "FileLoader run()!");
-                loadFace = new Face(faceAddr);
+                String prefix = PREFIX + "/" + filename;
+                Name name = new Name(prefix);
+                sendDebugMsg("Express name " + prefix);
+
+//                int i = 0;
+//                Log.i(TAG, "m_interestList:");
+//                for (String str: m_interestList) {
+//                    Log.i(TAG, "[" + i + "]" + str);
+//                    ++i;
+//                }
+
+                /***
+                 * If the consumer sends the same interest,
+                 * since the correspondent response to the interest
+                 * has been saved in the local nfd CS(content store),
+                 * the consumer doesn't need to send the interest to the remote face(content provider),
+                 * but just fetch the response from the local CS.
+                 */
+                if (m_interestList.contains(prefix)) {
+                    Log.i(TAG, "Create local face!");
+                    loadFace = new Face();
+                }
+                else {
+                    Log.i(TAG, "Create remote face: " + faceAddr);
+                    loadFace = new Face(faceAddr);
+                    m_interestList.add(prefix);
+                }
                 fileTimer = new FileTimer(1);
-                String prefix = PREFIX;
+                fileTimer.startUp();
 
                 //send an interest packet to get the size of the file
-                Name name = new Name(prefix).append(filename);
-                sendDebugMsg("Express name " + name.toUri());
-                fileTimer.startUp();
+
                 loadFace.expressInterest(name, fileTimer, fileTimer);
                 while (fileTimer.getCallbackCount() < 1) {
                     loadFace.processEvents();
@@ -386,7 +437,7 @@ public class FileFragment extends Fragment {
                     sendDebugMsg("Express name " + name1.toUri());
                     fileTimer.startUp();
                     int curCallback = fileTimer.getCallbackCount();
-                    interestId = loadFace.expressInterest(name1, fileTimer, fileTimer);
+                    loadFace.expressInterest(name1, fileTimer, fileTimer);
                     if (send_id == fileTimer.getReceiveID()) {
                         ++send_id;
                     }
@@ -427,24 +478,29 @@ public class FileFragment extends Fragment {
 
         public void loadFaceClose() {
             if (loadFace != null) {
-                loadFace.removePendingInterest(interestId);
+                //loadFace.removePendingInterest(interestId);
                 loadFace.shutdown();
                 Log.i(TAG, "loadFaceClose()!");
             }
         }
-
-        private long interestId;
         private Face loadFace;
         private String faceAddr;
         private String filename;
         private int send_id;
         private FileTimer fileTimer;
-
     }
 
     private class FileReqThread extends Thread {
-        public FileReqThread(String faceAddr) {
-            this.faceAddr = faceAddr;
+        /***
+         * The creator of class FileReqThread
+         * type= 0, first time to request the fileList;
+         *            even though the content provider has new content, the "fileList" request will get the same response.
+         *            1, refresh the "fileList"; add the System Time to the interest, since the System Time can't be the same,
+         *            the "fileList" request will get the latest content.
+         */
+        public FileReqThread() {
+            this.faceAddr = m_faceAddr;
+            Log.i(TAG, "FileReqThread: faceAddr: " + faceAddr);
         }
 
         @Override
@@ -454,17 +510,20 @@ public class FileFragment extends Fragment {
 
                 Face face = new Face(faceAddr);
                 FileTimer timer = new FileTimer(0);
-                String prefix = PREFIX + "/fileList";
-                Name name = new Name(prefix);
+                String prefix = new String(PREFIX + "/" + System.currentTimeMillis());
+
+                Name name = new Name(prefix + "/fileList");
                 sendDebugMsg("Express name " + name.toUri());
                 timer.startUp();
                 long interestId = face.expressInterest(name, timer, timer);
+//                Log.i(TAG, "interestId: " + interestId);
+
                 while (timer.getCallbackCount() < 1) {
                     face.processEvents();
                     Thread.sleep(5);
                 }
 
-                face.removePendingInterest(interestId);
+                //face.removePendingInterest(interestId);
                 face.shutdown();
                 Log.i(TAG, "reqFace close!");
             } catch (Exception e) {
@@ -473,6 +532,7 @@ public class FileFragment extends Fragment {
         }
 
         private String faceAddr;
+        private int type;
     }
 
     private static ByteBuffer
@@ -499,18 +559,18 @@ public class FileFragment extends Fragment {
             Data data = new Data(interest.getName());
 //            String content = "<<Echo " + interest.getName().toString();
 //            data.setContent(new Blob(content));
-            Log.i(TAG, ">> onInterest threadName:" + m_threadName);
+            //Log.i(TAG, ">> onInterest threadName:" + m_threadName);
             sendDebugMsg(">> Interest: " + interest.getName().toUri());
             String[] strs = interest.getName().toUri().split("/");
-//            int i = 0;
-//            for (String str: strs) {
-//                sendDebugMsg("[" + i + "] " +str);
-//                i ++;
-//            }
+            int i = 0;
+            for (String str: strs) {
+                sendDebugMsg("[" + i + "] " +str);
+                i ++;
+            }
             //The order of the judgement can't be changed
             int len = strs.length;
             if (strs[len - 1].equals("fileList")) {
-                //Log.i(TAG, getReqFileDir());
+                Log.i(TAG, getReqFileDir());
                 data.setContent(new Blob(getReqFileDir()));
             } else if (strs[len - 2].equals("FILE")) {
                 data.setContent(new Blob(getReqFileSize(strs[len - 1])));
@@ -596,7 +656,8 @@ public class FileFragment extends Fragment {
                 fileList = fileList + "/" + file.getName();
                 //Log.i(TAG, "In getReqFileDir: " + file.getName());
             }
-            //sendDebugMsg("fileList:" + fileList);
+
+            sendDebugMsg("fileList:" + fileList);
             return fileList;
         }
 
@@ -680,7 +741,7 @@ public class FileFragment extends Fragment {
 
         public void listenFaceClose() {
             if (listenFace != null) {
-                listenFace.removeRegisteredPrefix(registerPrefixId);
+                //listenFace.removeRegisteredPrefix(registerPrefixId);
                 listenFace.shutdown();
                 Log.i(TAG, "listenFaceClose()!");
             }
@@ -707,13 +768,13 @@ public class FileFragment extends Fragment {
     private class MyHandler extends Handler{
         public MyHandler(Looper L) {
             super(L);
-            Log.i(TAG, "threadName: " + m_threadName);
+//            Log.i(TAG, "threadName: " + m_threadName);
         }
 
         @Override
         public void handleMessage(Message msg) {
             String viewMsg = "Empty";
-            Log.i(TAG, "msg.what: " + msg.what);
+//            Log.i(TAG, "msg.what: " + msg.what);
             switch (msg.what) { // Result Code
                 case 100: //Some important informantion about debug
                     viewMsg = (String) msg.obj;
@@ -735,12 +796,12 @@ public class FileFragment extends Fragment {
                     }
                     break;
                 case 201://msg about file operation
-                    Log.i(TAG, "201!");
+//                    Log.i(TAG, "201!");
                 case 300: //failed to register the prefix
                 case 400: // TimeOut: 400
                     viewMsg = (String) msg.obj;
                     m_tvFileRecv.append(viewMsg + "\n");
-                    Log.i(TAG, "threadId: " + m_threadName + " m_tvFileRecv: " + m_tvFileRecv.getText().toString());
+//                    Log.i(TAG, "threadId: " + m_threadName + " m_tvFileRecv: " + m_tvFileRecv.getText().toString());
                     break;
                 default:
                     viewMsg = "Error Code: " + msg.what;
@@ -894,23 +955,24 @@ public class FileFragment extends Fragment {
     });
 
     private MyHandler m_handler;
-    private String m_threadName;
     private FileLoadThread m_fLoader;
     private FileReqThread m_fRequester;
     private FileListenThread m_fListener;
-    private String m_faceAddr;  // The value will be assigned in the creator of FileReqThread
+    private String m_faceAddr;  // The value will be assigned in the onCreateView
+    private String m_fileName;  // The value will be assigned in the onCreateView
     private List<String> m_fileList;  //The value will be assigned in the function "onClick" of Button m_btnReq
+    private List<String> m_interestList; // The value will be assigned in the run() of FileLoadThread
     private File m_savePath = null;  //It will be initialized in the function "onCreate" of FileListenThread
     private static final int MAXLEN = 8000;
     private static final String PREFIX = "/ndn/org/test/FILE";
     private EditText m_edFaceFile;
     private Button m_btnReq;
+    private Button m_btnRefresh;
     private TextView m_tvFileRecv;
     private TextView m_tvFileList;
     private TextView m_tvDebug;
     private Button m_btnFetch;
     private static final String TAG = "NDN";
     private ProgressDialog m_proDlg;
-
 
 }

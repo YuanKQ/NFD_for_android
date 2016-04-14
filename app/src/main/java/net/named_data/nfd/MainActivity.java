@@ -52,7 +52,7 @@ public class MainActivity extends ActionBarActivity
     setContentView(R.layout.activity_main);
 
     FragmentManager fragmentManager = getSupportFragmentManager();
-
+    Log.i("NDN", "MainActivity:" + DrawerFragment.class.toString());
     if (savedInstanceState != null) {
       m_drawerFragment = (DrawerFragment)fragmentManager.findFragmentByTag(DrawerFragment.class.toString());
     }
@@ -137,48 +137,73 @@ public class MainActivity extends ActionBarActivity
   @Override
   public void
   onDrawerItemSelected(int itemCode, int itemNameId) {
-
+    Log.i("NDN", "itemCode:" + itemCode + " itemNameId:" + itemNameId);
     String fragmentTag = "net.named-data.nfd.content-" + String.valueOf(itemCode);
-    FragmentManager fragmentManager = getSupportFragmentManager();
-
+    int  isNull = 0;
+//    if (m_curFragmentTag == null)
+//      m_curFragmentTag = fragmentTag;
+    m_nextFragmentTag = fragmentTag;
     // Create fragment according to user's selection
-    Fragment fragment = fragmentManager.findFragmentByTag(fragmentTag);
-    if (fragment == null) {
-      Log.i("NDN", "newInstance()");
-      switch (itemCode) {
-        case DRAWER_ITEM_GENERAL:
-          fragment = MainFragment.newInstance();
-          break;
-        case DRAWER_ITEM_FACES:
-          fragment = FaceListFragment.newInstance();
-          break;
-        case DRAWER_ITEM_ROUTES:
-          fragment = RouteListFragment.newInstance();
-          break;
-        // TODO: Placeholders; Fill these in when their fragments have been created
-        //    case DRAWER_ITEM_STRATEGIES:
-        //      break;
-        case DRAWER_ITEM_LOGCAT:
-          fragment = LogcatFragment.newInstance();
-          break;
-        case DRAWER_ITEM_CHAT:
-          fragment = ChatFragment.newInstance();
-          break;
-        case DRAWER_ITEM_FILE:
-          fragment = FileFragment.newInstance();
-          break;
-        default:
-          // Invalid; Nothing else needs to be done
-          return;
+    if (m_curFragmentTag == null || !m_curFragmentTag.equals(m_nextFragmentTag)) {
+      Log.i("NDN", "fragmentTag:" + fragmentTag);
+      FragmentManager fragmentManager = getSupportFragmentManager();
+      Fragment fragment = fragmentManager.findFragmentByTag(fragmentTag);
+      if (fragment == null) {
+        isNull = 1;
+        switch (itemCode) {
+          case DRAWER_ITEM_GENERAL:
+            Log.i("NDN", "Create General: " + fragmentTag);
+            fragment = MainFragment.newInstance();
+            break;
+          case DRAWER_ITEM_FACES:
+            Log.i("NDN", "Create Faces: " + fragmentTag);
+            fragment = FaceListFragment.newInstance();
+            break;
+          case DRAWER_ITEM_ROUTES:
+            Log.i("NDN", "Create Routes: " + fragmentTag);
+            fragment = RouteListFragment.newInstance();
+            break;
+          // TODO: Placeholders; Fill these in when their fragments have been created
+          //    case DRAWER_ITEM_STRATEGIES:
+          //      break;
+          case DRAWER_ITEM_LOGCAT:
+            Log.i("NDN", "Create Logcat: " + fragmentTag);
+            fragment = LogcatFragment.newInstance();
+            break;
+          case DRAWER_ITEM_CHAT:
+            Log.i("NDN", "Create Chat: " + fragmentTag);
+            fragment = ChatFragment.newInstance();
+            break;
+          case DRAWER_ITEM_FILE:
+            Log.i("NDN", "Create File: " + fragmentTag);
+            fragment = FileFragment.newInstance();
+            break;
+          default:
+            // Invalid; Nothing else needs to be done
+            return;
+        }
+      }
+      if (m_curFragmentTag == null) {
+        Log.i("NDN", "m_curFragmentTag == null");
+        m_curFragmentTag = fragmentTag;
+        fragmentManager.beginTransaction().add(R.id.main_fragment_container, fragment, fragmentTag).commit();
+      } else {
+        Fragment curFragment = fragmentManager.findFragmentByTag(m_curFragmentTag);
+        Log.i("NDN", "isNull=" + isNull);
+        if(isNull == 0)
+          fragmentManager.beginTransaction().hide(curFragment).show(fragment).commit();
+        else
+          fragmentManager.beginTransaction().hide(curFragment).add(R.id.main_fragment_container, fragment, fragmentTag).commit();
+        m_curFragmentTag = m_nextFragmentTag;
       }
     }
 
     // Update ActionBar title
     m_actionBarTitleId = itemNameId;
 
-    fragmentManager.beginTransaction()
-      .replace(R.id.main_fragment_container, fragment, fragmentTag)
-      .commit();
+//    fragmentManager.beginTransaction()
+//      .replace(R.id.main_fragment_container, fragment, fragmentTag)
+//      .commit();
   }
 
   @Override
@@ -202,6 +227,9 @@ public class MainActivity extends ActionBarActivity
 
 
   //////////////////////////////////////////////////////////////////////////////
+
+  private String m_curFragmentTag = null;
+  private String m_nextFragmentTag = null;
 
   /** Reference to drawer fragment */
   private DrawerFragment m_drawerFragment;
