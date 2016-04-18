@@ -9,15 +9,13 @@
     <EditText
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:id="@+id/ed_face"
-        android:layout_gravity="center_horizontal" />
+        android:id="@+id/ed_face" />
 
     <Button
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="NFD Ping"
-        android:id="@+id/btn_ping"
-        android:layout_gravity="center_horizontal" />
+        android:id="@+id/btn_ping" />
 
     <ScrollView
         android:layout_width="match_parent"

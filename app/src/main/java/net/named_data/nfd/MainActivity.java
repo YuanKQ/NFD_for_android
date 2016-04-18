@@ -172,7 +172,8 @@ public class MainActivity extends ActionBarActivity
             break;
           case DRAWER_ITEM_CHAT:
             Log.i("NDN", "Create Chat: " + fragmentTag);
-            fragment = ChatFragment.newInstance();
+            //fragment = ChatFragment.newInstance();
+            fragment = MsgFragment.newInstance();
             break;
           case DRAWER_ITEM_FILE:
             Log.i("NDN", "Create File: " + fragmentTag);

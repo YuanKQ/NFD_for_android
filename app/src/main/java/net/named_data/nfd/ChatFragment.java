@@ -88,12 +88,19 @@ public class ChatFragment extends Fragment {
     }
 
     @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        if (m_recvThread != null)
+            m_recvThread.recvFaceClose();
+    }
+
+    @Override
     public void onPause() {
         super.onPause();
 //        if (m_netThread != null)
 //            m_netThread.netFaceClose();
-        if (m_recvThread != null)
-            m_recvThread.recvFaceClose();
+
     }
 
     private class PingTimer implements OnData, OnTimeout {
@@ -138,7 +145,17 @@ public class ChatFragment extends Fragment {
 
             ++callbackCount_;
 
-            Log.i(TAG, "Time out for interest " + interest.getName().toUri());
+            Message msg = new Message();
+
+            msg.what = 400; // 400 ...
+
+            String contentStr = "Time out for interest " + interest.getName().toUri();
+
+            msg.obj = contentStr; // Result Object
+
+            m_handler.sendMessage(msg);
+
+            Log.i(TAG, contentStr);
 
         }
 
@@ -163,6 +180,7 @@ public class ChatFragment extends Fragment {
         public NetThread(String faceAddr) {
 //            m_faceAddr = faceAddr;
             netFace = new Face(faceAddr);
+            Log.i(TAG, "NetThread faceAddr: " + faceAddr);
         }
 
         @Override
@@ -175,7 +193,7 @@ public class ChatFragment extends Fragment {
                 PingTimer timer = new PingTimer();
 
                 String pingName = "/ndn/org/caida/ping/"
-                        + Math.floor(Math.random() * 100000);
+                        + System.currentTimeMillis();
 
                 Name name = new Name(pingName);
 
@@ -318,7 +336,7 @@ public class ChatFragment extends Fragment {
                 Name keyName = new Name("/testname/DSK-123");
                 Name certificateName = keyName.getSubName(0, keyName.size() - 1).append
                         ("KEY").append(keyName.get(-1)).append("ID-CERT").append("0");
-                System.out.println(certificateName.toString());
+                //System.out.println(certificateName.toString());
                 identityStorage.addKey(keyName, KeyType.RSA, new Blob(DEFAULT_RSA_PUBLIC_KEY_DER, false));
                 privateKeyStorage.setKeyPairForKeyName
                         (keyName, KeyType.RSA, DEFAULT_RSA_PUBLIC_KEY_DER, DEFAULT_RSA_PRIVATE_KEY_DER);
@@ -327,17 +345,8 @@ public class ChatFragment extends Fragment {
 
                 Echo echo = new Echo(keyChain, certificateName);
                 Name prefix = new Name("/ndn/org/caida/ping");
-                System.out.println("Register prefix  " + prefix.toUri());
+                //System.out.println("Register prefix  " + prefix.toUri());
                 recvFace.registerPrefix(prefix, echo, echo);
-
-                Name prefix1 = new Name("/jjjj");
-                System.out.println("Register prefix  " + prefix1);
-                recvFace.registerPrefix(prefix1, echo, echo);
-
-                Name prefix2 = new Name("/testecho");
-                System.out.println("Register prefix  " + prefix2);
-
-                recvFace.registerPrefix(prefix2, echo, echo);
                 // The main event loop.
                 // Wait to receive one interest for the prefix.
                 //while (echo.responseCount_ < 100) {
@@ -364,39 +373,6 @@ public class ChatFragment extends Fragment {
     }
 
 
-    // UI controller
-
-//    private Handler actionHandler = new Handler() {
-//
-//        public void handleMessage(Message msg) {
-//
-//            String viewMsg = "Empty";
-//            Log.i(TAG, "thread id:" + Thread.currentThread().getId());
-//            Log.i(TAG, "msg.what = " + msg.what);
-//            switch (msg.what) { // Result Code
-//                case 200: // Result Code Ex) Success: 200
-//                    viewMsg = (String) msg.obj; // Result Data..
-//                    Log.i(TAG, "viewMsg: " + viewMsg);
-//                    m_tvConsole.append(viewMsg + "\n");
-//                    //Toast.makeText(getActivity(), "viewMsg", Toast.LENGTH_LONG).show();
-//                    break;
-//
-//                default:
-//
-//                    viewMsg = "Error Code: " + msg.what;
-//
-//                    break;
-//
-//            }
-//
-//            if (m_proDlg != null)
-//                m_proDlg.dismiss();
-////            m_tvConsole.setText(viewMsg);
-//            Log.i(TAG, "setText(viewMsg)!");
-//        }
-//
-//    };
-
     class MyHandler extends Handler {
 //        public MyHandler() {
 //            Log.i(TAG, "Create MyHandler!");
@@ -413,13 +389,13 @@ public class ChatFragment extends Fragment {
             Log.i(TAG, "msg.what = " + msg.what);
             switch (msg.what) { // Result Code
                 case 200: // Result Code Ex) Success: 200
+                case 400: //Time Out: 400
                     viewMsg = (String) msg.obj; // Result Data..
                     Log.i(TAG, "viewMsg: " + viewMsg);
                     m_tvConsole.append(viewMsg + "\n");
                     Log.i(TAG, m_tvConsole.getText().toString());
                     //Toast.makeText(getActivity(), "viewMsg", Toast.LENGTH_LONG).show();
                     break;
-
                 default:
                     viewMsg = "Error Code: " + msg.what;
                     break;
@@ -433,7 +409,6 @@ public class ChatFragment extends Fragment {
 
         }
     }
-
 
     private static final ByteBuffer DEFAULT_RSA_PUBLIC_KEY_DER = toBuffer(new int[]{
             0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01,
