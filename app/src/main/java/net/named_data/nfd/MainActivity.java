@@ -77,6 +77,9 @@ public class MainActivity extends ActionBarActivity
       items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_files, 0,
               DRAWER_ITEM_FILE));
 
+      items.add(new DrawerFragment.DrawerItem(R.string.drawer_item_chronochat, 0,
+              DRAWER_ITEM_ChronoChat));
+
       m_drawerFragment = DrawerFragment.newInstance(items);
 
       fragmentManager
@@ -177,7 +180,10 @@ public class MainActivity extends ActionBarActivity
             break;
           case DRAWER_ITEM_FILE:
             Log.i("NDN", "Create File: " + fragmentTag);
-            fragment = FileFragment.newInstance();
+            fragment = FileListFragment.newInstance();
+            break;
+          case DRAWER_ITEM_ChronoChat:
+            fragment = ChronoChatFragment.newInstance();
             break;
           default:
             // Invalid; Nothing else needs to be done
@@ -246,4 +252,5 @@ public class MainActivity extends ActionBarActivity
   public static final int DRAWER_ITEM_LOGCAT = 5;
   public static final int DRAWER_ITEM_CHAT = 6;
   public static final int DRAWER_ITEM_FILE = 7;
+  public static final int DRAWER_ITEM_ChronoChat = 8;
 }
