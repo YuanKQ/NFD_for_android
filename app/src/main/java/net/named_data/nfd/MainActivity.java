@@ -177,7 +177,7 @@ public class MainActivity extends ActionBarActivity
             break;
           case DRAWER_ITEM_FILE:
             Log.i("NDN", "Create File: " + fragmentTag);
-            fragment = FileFragment.newInstance();
+            fragment = FileListFragment.newInstance();
             break;
           default:
             // Invalid; Nothing else needs to be done
