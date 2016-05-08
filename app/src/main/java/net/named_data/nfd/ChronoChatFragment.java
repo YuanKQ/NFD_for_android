@@ -1,6 +1,7 @@
 package net.named_data.nfd;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -42,6 +43,8 @@ import net.named_data.jndn.util.Blob;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
@@ -50,23 +53,26 @@ import java.util.Random;
  */
 public class ChronoChatFragment extends Fragment {
 
-    private EditText m_edChronoFace;
+//    private EditText m_edChronoFace;
     private EditText m_edHubPrefix;
     private EditText m_edRoomName;
     private EditText m_edUsrName;
     private Switch m_switchStart;
-    private TextView m_txMsg;
+    private static TextView m_txMsg;
     private EditText m_txInput;
     private Button m_btnSend;
 
     private String m_usrName = "";
     private String m_hubPrefix = "";
-    private String m_chronoFace = "";
+//    private String m_chronoFace = "";
     private String m_roomName = "";
     private TestChronoChat m_chronoChater;
 
     private final static int MAXLEN = 1000;
-    private final static String TAG = "CChat";
+    private final static String TAG = "NDN";
+    final static int session = (int)Math.round(getNowMilliseconds() / 1000.0);
+    private NetTool m_netTool;
+    private ArrayList<HashMap<String, Face>> m_faceList = new ArrayList<HashMap<String, Face>>();
 
     public static Fragment newInstance() {
         return new ChronoChatFragment();
@@ -75,6 +81,7 @@ public class ChronoChatFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.i(TAG, "onCreate!");
 //        m_ChronoChater = new TestChronoChat();
 //        m_ChronoChater.start();
     }
@@ -84,7 +91,7 @@ public class ChronoChatFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         @SuppressLint("InflateParams")
         View v = inflater.inflate(R.layout.activity_chronochat, null);
-        m_edChronoFace = (EditText) v.findViewById(R.id.ed_chronoFace);
+//        m_edChronoFace = (EditText) v.findViewById(R.id.ed_chronoFace);
         m_edHubPrefix = (EditText) v.findViewById(R.id.ed_hubPrefix);
         m_edRoomName = (EditText) v.findViewById(R.id.ed_roomName);
         m_edUsrName = (EditText) v.findViewById(R.id.ed_usrName);
@@ -103,32 +110,49 @@ public class ChronoChatFragment extends Fragment {
                         m_usrName = m_edUsrName.getText().toString();
                     }
 
-                    if (m_edChronoFace.getText().toString().equals("")) {
-                        m_switchStart.setChecked(false);
-                        showToast("Please input the face address!");
-                        return;
+                    if (m_edHubPrefix.getText().toString().equals("")) {
+                        m_hubPrefix = "/" + m_edHubPrefix.getHint().toString(); //Must start with "/"
                     } else {
-                        m_chronoFace = m_edChronoFace.getText().toString();
-                    }
-
-                    if (m_edChronoFace.getText().toString().equals("")) {
-                        m_hubPrefix = m_edHubPrefix.getHint().toString();
-                    } else {
-                        m_hubPrefix = m_edHubPrefix.getText().toString();
+                        m_hubPrefix = "/" + m_edHubPrefix.getText().toString();
                     }
 
                     if (m_edRoomName.getText().toString().equals("")) {
-                        m_roomName = m_edHubPrefix.getHint().toString();
+                        m_roomName = "/" + m_edRoomName.getHint().toString(); //Must start with "/"
                     } else {
-                        m_roomName = m_edRoomName.getText().toString();
+                        m_roomName = "/" + m_edRoomName.getText().toString();
                     }
 
+                    m_edHubPrefix.setText(m_hubPrefix);
+                    m_edHubPrefix.setEnabled(false);
+                    m_edRoomName.setText(m_roomName);
+                    m_edRoomName.setEnabled(false);
+                    m_edUsrName.setEnabled(false);
                     m_txMsg.setText("");
-                    m_chronoChater = new TestChronoChat(m_usrName, m_hubPrefix, m_roomName, m_chronoFace);
+
+                    //Find all devices installed in the same LAN
+                    m_netTool = new NetTool(getContext(), m_hubPrefix, m_roomName, session);
+                    m_netTool.scan();
+
+
+                    m_chronoChater = new TestChronoChat(m_usrName, m_hubPrefix, m_roomName, getContext());
                     m_chronoChater.toStart();
                     m_chronoChater.start();
+
+//                    final ProgressDialog proDlg = ProgressDialog.show(getContext(), "", "waiting...");
+//                    m_handler.postDelayed(new Runnable() {
+//                        @Override
+//                        public void run() {
+//                            Log.i(TAG, "progressDlg End!");
+//                            proDlg.dismiss();
+//
+//                        }
+//                    }, 30000);
+
                 } else {
-                    m_chronoFace = "";
+//                    m_chronoFace = "";
+                    m_edHubPrefix.setEnabled(true);
+                    m_edRoomName.setEnabled(true);
+                    m_edUsrName.setEnabled(true);
                     if (m_chronoChater != null)
                         m_chronoChater.end();
                 }
@@ -150,7 +174,7 @@ public class ChronoChatFragment extends Fragment {
                     return;
                 }
 
-                if (m_chronoFace.equals("")) {
+                if (m_switchStart.isChecked() == false) {
                     showToast("Please connect first!");
                     return;
                 }
@@ -168,8 +192,12 @@ public class ChronoChatFragment extends Fragment {
     */
     class Chat implements ChronoSync2013.OnInitialized,
             ChronoSync2013.OnReceivedSyncState, OnData, OnInterestCallback {
+
+        private long prefixID_;
+        private String IP_;
+
         public Chat
-                (String screenName, String chatRoom, Name hubPrefix, Face face,
+                (String screenName, String chatRoom, Name hubPrefix, Face face, Context ctx,
                  KeyChain keyChain, Name certificateName)
         {
             Log.i(TAG, "Chat Create!");
@@ -181,13 +209,21 @@ public class ChronoChatFragment extends Fragment {
             heartbeat_ = this.new Heartbeat();
 
             // This should only be called once, so get the random string here.
-            chatPrefix_ = new Name(hubPrefix).append(chatRoom_).append(getRandomString());
-            int session = (int)Math.round(getNowMilliseconds() / 1000.0);
+            chatPrefix_ = new Name(hubPrefix + chatRoom_).append(getRandomString());
+//            int session = (int)Math.round(getNowMilliseconds() / 1000.0);
             userName_ = screenName_ + session;
+
+
+            //initialize the m_faceList
+            IP_ = m_netTool.getLocAddr();
+            HashMap<String, Face>map = new HashMap<String, Face>();
+            map.put(IP_, new Face(IP_));
+            m_faceList.add(map);
+
             try {
                 sync_ = new ChronoSync2013
                         (this, this, chatPrefix_,
-                                new Name("/ndn/broadcast/ChronoChat-0.3").append(chatRoom_), session,
+                                new Name("/ndn/broadcast/ChronoChat-0.3" + chatRoom_), session,
                                 face, keyChain, certificateName, syncLifetime_, RegisterFailed.onRegisterFailed_);
             } catch (IOException | SecurityException ex) {
                 Log.e(TAG, "IOException | SecurityException ex in Chat constructor: sync_");
@@ -196,7 +232,7 @@ public class ChronoChatFragment extends Fragment {
             }
 
             try {
-                face.registerPrefix(chatPrefix_, this, RegisterFailed.onRegisterFailed_);
+                prefixID_ = face.registerPrefix(chatPrefix_, this, RegisterFailed.onRegisterFailed_);
                 sendMsg(100, "@@@Register:" + chatPrefix_.toString());
             } catch (IOException | SecurityException ex) {
                 Log.e(TAG, "IOException | SecurityException ex in Chat constructor: registerPrefix");
@@ -204,10 +240,17 @@ public class ChronoChatFragment extends Fragment {
             }
         }
 
+        public void chatEnd() {
+            face_.removeRegisteredPrefix(prefixID_);
+            face_.shutdown();
+        }
+
         // Send a chat message.
         public final void
         sendMessage(String chatMessage) throws IOException, SecurityException
         {
+//            //sendDebugMsg("-------------------------");
+//            //sendDebugMsg("sendMessage:");
             if (messageCache_.size() == 0)
                 messageCacheAppend(ChatbufProto.ChatMessage.ChatMessageType.JOIN, "xxx");
 
@@ -215,6 +258,7 @@ public class ChronoChatFragment extends Fragment {
             // forming Sync Data Packet.
             if (!chatMessage.equals("")) {
                 sync_.publishNextSequenceNo();
+//                //sendDebugMsg("	#sequenceNo:" + sync_.getSequenceNo());
                 messageCacheAppend(ChatbufProto.ChatMessage.ChatMessageType.CHAT, chatMessage);
                 sendMsg(200, screenName_ + ": " + chatMessage);
                 Log.i(TAG, screenName_ + ": " + chatMessage);
@@ -225,7 +269,10 @@ public class ChronoChatFragment extends Fragment {
         public final void
         leave() throws IOException, SecurityException
         {
+            //sendDebugMsg("-------------------------");
+            //sendDebugMsg("leave()");
             sync_.publishNextSequenceNo();
+            //sendDebugMsg("	#sequenceNo:" + sync_.getSequenceNo());
             messageCacheAppend(ChatbufProto.ChatMessage.ChatMessageType.LEAVE, "xxx");
 
             Log.i(TAG, "Chat leave!");
@@ -239,6 +286,8 @@ public class ChronoChatFragment extends Fragment {
         public final void
         onInitialized()
         {
+//            //sendDebugMsg("-------------------------");
+            ////sendDebugMsg("onInitialized:");
             // Set the heartbeat timeout using the Interest timeout mechanism. The
             // heartbeat() function will call itself again after a timeout.
             // TODO: Are we sure using a "/local/timeout" interest is the best future call approach?
@@ -257,6 +306,10 @@ public class ChronoChatFragment extends Fragment {
                 sendMsg(200, "Member: " + screenName_);
                 sendMsg(200, screenName_ + ": Join");
                 messageCacheAppend(ChatbufProto.ChatMessage.ChatMessageType.JOIN, "xxx");
+
+                HashMap<String, String> map = new HashMap<String, String>();
+                map.put(userName_, String.valueOf(0));
+                sequence_.add(map);
             }
         }
 
@@ -266,9 +319,14 @@ public class ChronoChatFragment extends Fragment {
         public final void
         onReceivedSyncState(List syncStates, boolean isRecovery)
         {
+            //sendDebugMsg("-------------------------");
+            //sendDebugMsg("onReceivedSyncState:");
+            Face sendFace;
+            sendFace = m_faceList.get(0).get(IP_);
             // This is used by onData to decide whether to display the chat messages.
             isRecoverySyncState_ = isRecovery;
-
+//            //sendDebugMsg("	isRecovery: " + isRecovery);
+            ArrayList<Face> faceList  = new ArrayList<Face>();
             ArrayList sendList = new ArrayList(); // of String
             ArrayList sessionNoList = new ArrayList(); // of long
             ArrayList sequenceNoList = new ArrayList(); // of long
@@ -277,10 +335,44 @@ public class ChronoChatFragment extends Fragment {
                 Name nameComponents = new Name(syncState.getDataPrefix());
                 String tempName = nameComponents.get(-1).toEscapedString();
                 long sessionNo = syncState.getSessionNo();
+                String tmpIP = m_netTool.findFaceUri(String.valueOf(sessionNo));
+//                //sendDebugMsg("  sendFace Uri:" + tmpIP);
+                boolean isExist = false;
+                if (tmpIP != null) {
+                    for (int i = 0; i < m_faceList.size(); i ++) {
+                        if (m_faceList.get(i).containsKey(tmpIP)) {
+//                            //sendDebugMsg("  m_faceList has contained: " + m_faceList.get(i));
+                            sendFace = m_faceList.get(i).get(tmpIP);
+                            isExist = true;
+                            break;
+                        }
+                    }
+//                    if (i >= m_faceList.size()) {
+//                        HashMap<String, Face> map = new HashMap<String, Face>();
+//                        sendFace = new Face(tmpIP);
+//                        map.put(tmpIP, sendFace);
+//                        //sendDebugMsg("  m_faceList add new item:" + map);
+//                        m_faceList.add(map);
+//                    }
+                } else {
+                    //sendDebugMsg("  Can't not find the faceUri corresponding to the sessionNO!");
+                }
+                if (!isExist) {
+                    HashMap<String, Face> map = new HashMap<String, Face>();
+                    sendFace = new Face(tmpIP);
+                    map.put(tmpIP, sendFace);
+//                    //sendDebugMsg("  m_faceList add new item:" + map);
+                    m_faceList.add(map);
+
+//                    m_netTool.addFaceItem();
+                }
+                faceList.add(sendFace);
+                //sendDebugMsg("	nameComponent:" + nameComponents.toString() + " tempName:" + tempName + " sessionNo:" + sessionNo);
                 if (!tempName.equals(screenName_)) {
                     int index = -1;
                     for (int k = 0; k < sendList.size(); ++k) {
                         if (((String)sendList.get(k)).equals(syncState.getDataPrefix())) {
+//                            //sendDebugMsg("	(String)sendList.get(k):" + (String)sendList.get(k));
                             index = k;
                             break;
                         }
@@ -303,8 +395,16 @@ public class ChronoChatFragment extends Fragment {
                 Interest interest = new Interest(new Name(uri));
                 interest.setInterestLifetimeMilliseconds(syncLifetime_);
                 try {
-                    face_.expressInterest(interest, this, ChatTimeout.onTimeout_);
-                } catch (IOException ex) {
+//                    face_.expressInterest(interest, this, ChatTimeout.onTimeout_);
+//                    m_faceList.get(0).get(IP_).expressInterest(interest, this, ChatTimeout.onTimeout_);
+                    faceList.get(i).expressInterest(interest, this, ChatTimeout.onTimeout_);
+//                    Interest interest1 = new Interest(new Name("/yuan/test"));
+//                    faceList.get(i).expressInterest(interest1, this, ChatTimeout.onTimeout_);
+//                    //sendDebugMsg("Finally sendFace is " + faceList.get(i));
+//                    //sendDebugMsg("<<onReceivedSyncState interest:" + uri);
+                    faceList.get(i).processEvents();
+                    Thread.sleep(10);
+                } catch (Exception ex) {
                     Log.e(TAG, "IOException in onReceivedSyncState!");
 //                    Logger.getLogger(Chat.class.getName()).log(Level.SEVERE, null, ex);
                     return;
@@ -319,12 +419,19 @@ public class ChronoChatFragment extends Fragment {
         (Name prefix, Interest interest, Face face, long interestFilterId,
          InterestFilter filter)
         {
+            //sendDebugMsg("-------------------------");
+            //sendDebugMsg("onInterest: ");
+//            //sendDebugMsg("	>>prefix:" + prefix.toString());
+            //sendDebugMsg("	>>interest:" + interest.getName().toString());
             ChatbufProto.ChatMessage.Builder builder = ChatbufProto.ChatMessage.newBuilder();
             long sequenceNo = Long.parseLong(interest.getName().get(chatPrefix_.size() + 1).toEscapedString());
+            //sendDebugMsg("	sequenceNo: " + sequenceNo);
             boolean gotContent = false;
             for (int i = messageCache_.size() - 1; i >= 0; --i) {
                 CachedMessage message = (CachedMessage)messageCache_.get(i);
+                //sendDebugMsg("	msgType:" + message.getMessageType() + "	msg:" + message.getMessage());
                 if (message.getSequenceNo() == sequenceNo) {
+
                     if (!message.getMessageType().equals(ChatbufProto.ChatMessage.ChatMessageType.CHAT)) {
                         builder.setFrom(screenName_);
                         builder.setTo(chatRoom_);
@@ -357,6 +464,7 @@ public class ChronoChatFragment extends Fragment {
                 }
                 try {
                     face.putData(data);
+                    //sendDebugMsg("	<<onInterest:sendData [screeName]" + builder.getFrom() + " [chatRoom]" + builder.getTo() + " [msgType]" + builder.getType() + " [data]" + builder.getData());
                 } catch (IOException ex) {
                     Log.e(TAG, "IOException in onInterest!");
 //                    Logger.getLogger(Chat.class.getName()).log(Level.SEVERE, null, ex);
@@ -369,6 +477,12 @@ public class ChronoChatFragment extends Fragment {
         public final void
         onData(Interest interest, Data data)
         {
+            //sendDebugMsg("-------------------------");
+            //sendDebugMsg("onData:");
+            //sendDebugMsg("	>>interest:" + interest.getName().toString());
+
+            Log.i(TAG, ">>onData:" + data.getContent().toString());
+
             ChatbufProto.ChatMessage content;
             try {
                 content = ChatbufProto.ChatMessage.parseFrom(data.getContent().getImmutableArray());
@@ -377,19 +491,21 @@ public class ChronoChatFragment extends Fragment {
 //                Logger.getLogger(Chat.class.getName()).log(Level.SEVERE, null, ex);
                 return;
             }
-            if (getNowMilliseconds() - content.getTimestamp() * 1000.0 < 120000.0) {
+            if (getNowMilliseconds() - content.getTimestamp() * 1000.0 < 180000.0) {
                 String name = content.getFrom();
                 String prefix = data.getName().getPrefix(-2).toUri();
                 long sessionNo = Long.parseLong(data.getName().get(-2).toEscapedString());
                 long sequenceNo = Long.parseLong(data.getName().get(-1).toEscapedString());
                 String nameAndSession = name + sessionNo;
+                //sendDebugMsg("	data name:" + name + " prefix:" + prefix + " session:" + sessionNo + " sequence:" + sequenceNo);
 
                 int l = 0;
                 //update roster
                 while (l < roster_.size()) {
-                    String entry = (String)roster_.get(l);
+                    String entry = (String) roster_.get(l);
                     String tempName = entry.substring(0, entry.length() - 10);
                     long tempSessionNo = Long.parseLong(entry.substring(entry.length() - 10));
+                    //sendDebugMsg("roster[" + l + "] tempname:" + tempName + " tempsession:" + tempSessionNo);
                     if (!name.equals(tempName) && !content.getType().equals(ChatbufProto.ChatMessage.ChatMessageType.LEAVE))
                         ++l;
                     else {
@@ -403,6 +519,33 @@ public class ChronoChatFragment extends Fragment {
                     roster_.add(nameAndSession);
                     sendMsg(200, name + ": Join");
                 }
+
+                //update the sequence_
+                boolean isPrint = true;
+                int i = 0;
+                for (; i < sequence_.size(); ++i) {
+                    HashMap<String, String> map = sequence_.get(i);
+                    if (map.containsKey(nameAndSession)) {
+//                        //sendDebugMsg("  " + map.toString() + " contains key: " + nameAndSession);
+                        String mapSequence = map.get(nameAndSession);
+                        if (mapSequence.compareTo(String.valueOf(sequenceNo)) >= 0) {
+                            isPrint = false;
+                            break;
+                        }
+
+                        HashMap<String, String> tmpMap = new HashMap<String, String>();
+                        tmpMap.put(nameAndSession, String.valueOf(sequenceNo));
+                        sequence_.set(i, tmpMap);
+//                        //sendDebugMsg("tmpMap: " + tmpMap.toString());
+                    }
+                }
+                if (i >= sequence_.size()) {
+                    HashMap<String, String> tmpMap = new HashMap<String, String>();
+                    tmpMap.put(nameAndSession, String.valueOf(sequenceNo));
+                    sequence_.add(tmpMap);
+//                    //sendDebugMsg("sequence_ add new item: " + tmpMap);
+                }
+
 
                 // Set the alive timeout using the Interest timeout mechanism.
                 // TODO: Are we sure using a "/local/timeout" interest is the best future call approach?
@@ -418,18 +561,32 @@ public class ChronoChatFragment extends Fragment {
                     return;
                 }
 
+                //sendDebugMsg("  isPrint: " + isPrint);
+//                //sendDebugMsg("isRecoverySyncState_:" + isRecoverySyncState_);
                 // isRecoverySyncState_ was set by sendInterest.
                 // TODO: If isRecoverySyncState_ changed, this assumes that we won't get
                 //   data from an interest sent before it changed.
-                if (content.getType().equals(ChatbufProto.ChatMessage.ChatMessageType.CHAT) &&
-                        !isRecoverySyncState_ && !content.getFrom().equals(screenName_))
-                    sendMsg(200, content.getFrom() + ": " + content.getData());
+                //sendDebugMsg("  content: [type]" + content.getType() + " [userName]" + content.getFrom() + " [data]" + content.getData());
+                if (isPrint && content.getType().equals(ChatbufProto.ChatMessage.ChatMessageType.CHAT) &&
+                        sessionNo != session)  //!isRecoverySyncState_ && content.getFrom().equals(screenName_)
+                        {
+                            sendMsg(200, content.getFrom() + ": " + content.getData());
+                        }
                 else if (content.getType().equals(ChatbufProto.ChatMessage.ChatMessageType.LEAVE)) {
                     // leave message
                     int n = roster_.indexOf(nameAndSession);
                     if (n >= 0 && !name.equals(screenName_)) {
                         roster_.remove(n);
                         sendMsg(200, name + ": Leave");
+                    }
+
+                    for (int j = 0; j < sequence_.size(); ++ j) {
+                        HashMap<String, String> map = sequence_.get(j);
+                        if (map.containsKey(nameAndSession) && !nameAndSession.contains(screenName_)) {
+                            sequence_.remove(i);
+                            //sendDebugMsg("remove sequence_ item: " + map.toString());
+                            break;
+                        }
                     }
                 }
             }
@@ -444,6 +601,10 @@ public class ChronoChatFragment extends Fragment {
         private class Heartbeat implements OnTimeout {
             public final void
             onTimeout(Interest interest) {
+//                //sendDebugMsg("------------------------");
+//                //sendDebugMsg("Heartbeat: onTimeout");
+//                //sendDebugMsg("	>>interest:" + interest.getName().toString());
+
                 if (messageCache_.size() == 0)
                     messageCacheAppend(ChatbufProto.ChatMessage.ChatMessageType.JOIN, "xxx");
 
@@ -482,18 +643,36 @@ public class ChronoChatFragment extends Fragment {
                 name_ = name;
                 sessionNo_ = sessionNo;
                 prefix_ = prefix;
+
+//                //sendDebugMsg("---------------------------");
+               // //sendDebugMsg("Alive constructor:");
+//                //sendDebugMsg("	tempSequenceNo:" + tempSequenceNo + " name:" + name + " sessionNo" + sessionNo + " prefix:" + prefix);
+
             }
 
             public final void
             onTimeout(Interest interest)
             {
+                //sendDebugMsg("-------------------------");
+                //sendDebugMsg("Alive: onTimeout");
+                //sendDebugMsg("	>>interest:" + interest.getName().toString());
                 long sequenceNo = sync_.getProducerSequenceNo(prefix_, sessionNo_);
                 String nameAndSession = name_ + sessionNo_;
+                //sendDebugMsg("	nameAndSession: " + nameAndSession);
                 int n = roster_.indexOf(nameAndSession);
                 if (sequenceNo != -1 && n >= 0) {
                     if (tempSequenceNo_ == sequenceNo) {
                         roster_.remove(n);
                         sendMsg(200, name_ + ": Leave");
+                    }
+                }
+
+                for (int i = 0; i < sequence_.size(); ++ i) {
+                    HashMap<String, String> map = sequence_.get(i);
+                    if (map.containsKey(nameAndSession) && map.get(nameAndSession).equals(sequenceNo)) {
+                        sequence_.remove(i);
+                        //sendDebugMsg("  remove the sequence_ item: " + map.toString());
+                        break;
                     }
                 }
             }
@@ -524,6 +703,7 @@ public class ChronoChatFragment extends Fragment {
         // Use a non-template ArrayList so it works with older Java compilers.
         private final ArrayList messageCache_ = new ArrayList(); // of CachedMessage
         private final ArrayList roster_ = new ArrayList(); // of String
+        private final ArrayList<HashMap<String, String>> sequence_ = new ArrayList<HashMap<String, String>>();
         private final int maxMessageCacheLength_ = 100;
         private boolean isRecoverySyncState_ = true;
         private final String screenName_;
@@ -679,6 +859,7 @@ public class ChronoChatFragment extends Fragment {
         public final void
         onRegisterFailed(Name prefix)
         {
+            //sendDebugMsg("Register failed for prefix " + prefix.toUri());
             Log.e(TAG, "Register failed for prefix " + prefix.toUri());
         }
 
@@ -689,7 +870,10 @@ public class ChronoChatFragment extends Fragment {
     // This should never be called.
     private static class DummyOnData implements OnData {
         public final void
-        onData(Interest interest, Data data) {}
+        onData(Interest interest, Data data) {
+            //sendDebugMsg("-----------------------");
+            //sendDebugMsg("DummyOnData");
+        }
 
         public final static OnData onData_ = new DummyOnData();
     }
@@ -725,6 +909,10 @@ public class ChronoChatFragment extends Fragment {
     private static class ChatTimeout implements OnTimeout {
         public final void
         onTimeout(Interest interest) {
+            //sendDebugMsg("-------------------");
+            //sendDebugMsg("ChatTimeout: ");
+            //sendDebugMsg("	>>interest:" + interest.getName().toString());
+            //sendDebugMsg("Timeout waiting for chat data");
             Log.e(TAG, "Timeout waiting for chat data");
         }
 
@@ -748,7 +936,7 @@ public class ChronoChatFragment extends Fragment {
 //        public final void
 //        onRegisterFailed(Name prefix)
 //        {
-//            System.out.println("Register failed for prefix " + prefix.toUri());
+//            //sendDebugMsg("Register failed for prefix " + prefix.toUri());
 //        }
 //
 //        public final static OnRegisterFailed onRegisterFailed_ = new RegisterFailed();
@@ -762,12 +950,13 @@ public class ChronoChatFragment extends Fragment {
         private boolean isConnect = false;
         private boolean isReady = false;
         private String input = "";
+        private Context m_ctx;
 
-        public TestChronoChat(String screenName, String hubPrefix, String chatRoom, String host) {
+        public TestChronoChat(String screenName, String hubPrefix, String chatRoom, Context ctx) {
             this.screenName = screenName;
             this.hubPrefix = hubPrefix;
             this.chatRoom = chatRoom;
-            this.host = "";
+            m_ctx = ctx;
             Log.i(TAG, "TestChronoChat is started!");
         }
 
@@ -791,29 +980,29 @@ public class ChronoChatFragment extends Fragment {
         {
             try {
                 Log.i(TAG, "TestChronoChat Run!");
-//            System.out.println("Enter your chat username:");
+//            //sendDebugMsg("Enter your chat username:");
 //            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 //            screenName = reader.readLine();
 //
 //            String defaultHubPrefix = "ndn/edu/ucla/remap";
-//            System.out.println("Enter your hub prefix [" + defaultHubPrefix + "]:");
+//            //sendDebugMsg("Enter your hub prefix [" + defaultHubPrefix + "]:");
 //            hubPrefix = reader.readLine();
 //            if (hubPrefix.equals(""))
 //                hubPrefix = defaultHubPrefix;
 //
 //            String defaultChatRoom = "ndnchat";
-//            System.out.println("Enter the chatroom name [" + defaultChatRoom + "]:");
+//            //sendDebugMsg("Enter the chatroom name [" + defaultChatRoom + "]:");
 //            chatRoom = reader.readLine();
 //            if (chatRoom.equals(""))
 //                chatRoom = defaultChatRoom;
 //
 //            host = "localhost";
-//            System.out.println("Connecting to " + host + ", Chatroom: " + chatRoom +
+//            //sendDebugMsg("Connecting to " + host + ", Chatroom: " + chatRoom +
 //                    ", Username: " + screenName);
-//            System.out.println("");
+//            //sendDebugMsg("");
 
                 // Set up the key chain.
-                chronoface = new Face(host);
+                chronoface = new Face();
 
                 MemoryIdentityStorage identityStorage = new MemoryIdentityStorage();
                 MemoryPrivateKeyStorage privateKeyStorage = new MemoryPrivateKeyStorage();
@@ -830,10 +1019,10 @@ public class ChronoChatFragment extends Fragment {
                 chronoface.setCommandSigningInfo(keyChain, certificateName);
 
                 Chat chat = new Chat
-                        (screenName, chatRoom, new Name(hubPrefix), chronoface, keyChain, certificateName);
+                        (screenName, chatRoom, new Name(hubPrefix), chronoface, m_ctx, keyChain, certificateName);
 
                 // The main loop to process Chat while checking stdin to send a message.
-//            System.out.println("Enter your chat message. To quit, enter \"leave\" or \"exit\".");
+//            //sendDebugMsg("Enter your chat message. To quit, enter \"leave\" or \"exit\".");
                 while (isConnect) {
 //                    Log.i(TAG, "isConnect = " + isConnect);
                     if (isReady) {
@@ -863,8 +1052,10 @@ public class ChronoChatFragment extends Fragment {
                         break;
 
                     chronoface.processEvents();
-                    Thread.sleep(10);
+                    Thread.sleep(20);
                 }
+
+//                chat.chatEnd();
             }
             catch (Exception e) {
                 Log.e(TAG, "exception: " + e.getMessage());
@@ -877,14 +1068,27 @@ public class ChronoChatFragment extends Fragment {
     /***
      * UI operation
      */
-    private Handler m_handler = new Handler() {
+
+    public static void sendDebugMsg(String info) {
+        Calendar ca = Calendar.getInstance();
+        int hour = ca.get(Calendar.HOUR_OF_DAY);
+        int min = ca.get(Calendar.MINUTE);
+        int sec = ca.get(Calendar.SECOND);
+        Message msg = new Message();
+        msg.what = 400;
+        msg.obj = hour + ":" + min + ":" + sec + " " + info;
+        m_handler.sendMessage(msg);
+    }
+    private static Handler m_handler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case 100:
                 case 200:
-                    m_txMsg.append((String)msg.obj );
+                case 400: //just for debug
+                    m_txMsg.append((String)msg.obj + "\n");
                     break;
+
                 default:
                     super.handleMessage(msg);
             }

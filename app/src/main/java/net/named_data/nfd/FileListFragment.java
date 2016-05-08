@@ -718,12 +718,12 @@ public class FileListFragment extends Fragment {
         private String switchFileSize(long size) {
             double tmp = size;
             String[] unit = {"B", "KB", "MB", "GB", "TB"};
-            int i = -1;
-            do {
+            int i = 0;
+            while (tmp > 1024){
                 Log.i(TAG, "tmp=" + tmp);
                 tmp = tmp / 1024;
                 i ++;
-            }while (tmp > 1024);
+            }
             Log.i(TAG, "result=" + tmp + unit[i]);
             return tmp + unit[i];
         }
